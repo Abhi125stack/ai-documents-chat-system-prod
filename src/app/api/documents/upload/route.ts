@@ -1,4 +1,7 @@
 export const runtime = "nodejs";
+// Must be first: installs DOMMatrix/Path2D/ImageData before pdf-parse (pdfjs-dist)
+// evaluates them at module load in the Node server bundle.
+import "@/lib/pdf-polyfill";
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Document, { IDocument } from "@/models/Document";
