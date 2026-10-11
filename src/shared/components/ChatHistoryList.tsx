@@ -6,20 +6,44 @@ import {
   Clock,
   Loader2,
   ChevronRight,
-  FileText
+  FileText,
+  AlertCircle,
+  RotateCw
 } from "lucide-react";
 import { useChatHistory } from '@/shared/hooks/useChatHistory';
 import { PopulatedChatMetadata } from "@/types";
 import Link from 'next/link';
 
 export const ChatHistoryList: React.FC = () => {
-  const { chats, isLoading } = useChatHistory();
+  const { chats, isLoading, isError, refetch } = useChatHistory();
 
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 animate-pulse">
             <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
             <p className="text-foreground/50 font-medium text-sm">Fetching your chat history...</p>
+      </div>
+    );
+  }
+
+  // A failed fetch must not masquerade as "no conversations yet".
+  if (isError) {
+    return (
+      <div role="alert" className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in duration-700">
+        <div className="w-20 h-20 rounded-3xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-6">
+          <AlertCircle className="w-10 h-10 text-red-500" />
+        </div>
+        <h3 className="text-xl font-bold text-foreground mb-2">Couldn&apos;t load your chat history</h3>
+        <p className="text-foreground/50 max-w-sm mx-auto leading-relaxed text-sm mb-6">
+          Something went wrong while fetching your conversations. Your chats are safe. Please try again.
+        </p>
+        <button
+          onClick={() => refetch()}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-background font-bold text-xs uppercase tracking-widest hover:opacity-90 transition-opacity cursor-pointer"
+        >
+          <RotateCw className="w-3.5 h-3.5" />
+          Retry
+        </button>
       </div>
     );
   }

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDocuments } from '@/shared/hooks/useDocuments';
+import { useModalA11y } from '@/shared/hooks/useModalA11y';
 import { DocumentListProps, DocumentMetadata } from "@/types";
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -32,6 +33,13 @@ export const DocumentList: React.FC<DocumentListProps> = ({ search }) => {
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [isBulkDeleting, setIsBulkDeleting] = React.useState(false);
+
+  // Escape closes, focus is trapped in the dialog. Closing is blocked while a
+  // delete is in flight, matching the existing backdrop-click behaviour.
+  const deleteDialogRef = React.useRef<HTMLDivElement>(null);
+  const bulkDialogRef = React.useRef<HTMLDivElement>(null);
+  useModalA11y(deleteDialogRef, !!deletingId, () => { if (!isDeleting) setDeletingId(null); });
+  useModalA11y(bulkDialogRef, isBulkDeleting, () => { if (!isDeletingMultiple) setIsBulkDeleting(false); });
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -238,12 +246,20 @@ export const DocumentList: React.FC<DocumentListProps> = ({ search }) => {
       {deletingId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => !isDeleting && setDeletingId(null)} />
-          <div className="relative w-full max-w-md p-8 rounded-4xl bg-card border border-border shadow-2xl animate-in zoom-in-95 duration-300">
+          <div
+            ref={deleteDialogRef}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-doc-title"
+            aria-describedby="delete-doc-desc"
+            tabIndex={-1}
+            className="relative w-full max-w-md p-8 rounded-4xl bg-card border border-border shadow-2xl animate-in zoom-in-95 duration-300 outline-none"
+          >
             <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center mb-6 mx-auto">
               <AlertCircle className="w-8 h-8 text-red-500" />
             </div>
-            <h3 className="text-xl font-bold text-foreground text-center mb-2">Delete Document?</h3>
-            <p className="text-foreground/50 text-center mb-8 leading-relaxed text-sm">
+            <h3 id="delete-doc-title" className="text-xl font-bold text-foreground text-center mb-2">Delete Document?</h3>
+            <p id="delete-doc-desc" className="text-foreground/50 text-center mb-8 leading-relaxed text-sm">
               Are you sure to delete this document? This action cannot be undone and will permanently remove all associated data.
             </p>
             <div className="flex gap-4">
@@ -277,12 +293,20 @@ export const DocumentList: React.FC<DocumentListProps> = ({ search }) => {
       {isBulkDeleting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => !isDeletingMultiple && setIsBulkDeleting(false)} />
-          <div className="relative w-full max-w-md p-8 rounded-4xl bg-card border border-border shadow-2xl animate-in zoom-in-95 duration-300">
+          <div
+            ref={bulkDialogRef}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="bulk-delete-title"
+            aria-describedby="bulk-delete-desc"
+            tabIndex={-1}
+            className="relative w-full max-w-md p-8 rounded-4xl bg-card border border-border shadow-2xl animate-in zoom-in-95 duration-300 outline-none"
+          >
             <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center mb-6 mx-auto">
               <AlertCircle className="w-8 h-8 text-red-500" />
             </div>
-            <h3 className="text-xl font-bold text-foreground text-center mb-2">Delete {selectedIds.length} Documents?</h3>
-            <p className="text-foreground/50 text-center mb-8 leading-relaxed text-sm">
+            <h3 id="bulk-delete-title" className="text-xl font-bold text-foreground text-center mb-2">Delete {selectedIds.length} Documents?</h3>
+            <p id="bulk-delete-desc" className="text-foreground/50 text-center mb-8 leading-relaxed text-sm">
               Are you sure you want to delete all {selectedIds.length} selected documents? This will permanently remove them and all their chat history.
             </p>
             <div className="flex gap-4">

@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, X, FileText, ArrowRight, Layers, MousePointer2 } from "lucide-react";
 import { DocumentMetadata } from "@/types";
 import { useRouter } from "next/navigation";
+import { useModalA11y } from "@/shared/hooks/useModalA11y";
 
 interface PostUploadModalProps {
     isOpen: boolean;
@@ -15,6 +16,8 @@ interface PostUploadModalProps {
 export const PostUploadModal: React.FC<PostUploadModalProps> = ({ isOpen, onClose, documents }) => {
     const router = useRouter();
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const dialogRef = useRef<HTMLDivElement>(null);
+    useModalA11y(dialogRef, isOpen, onClose);
 
     const toggleSelect = (id: string) => {
         setSelectedIds(prev => 
@@ -52,10 +55,15 @@ export const PostUploadModal: React.FC<PostUploadModalProps> = ({ isOpen, onClos
 
                 {/* Modal */}
                 <motion.div 
+                    ref={dialogRef}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="post-upload-title"
+                    tabIndex={-1}
                     initial={{ scale: 0.9, opacity: 0, y: 20 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                    className="relative w-full max-w-lg bg-card border border-border rounded-[2.5rem] shadow-2xl overflow-hidden"
+                    className="relative w-full max-w-lg bg-card border border-border rounded-[2.5rem] shadow-2xl overflow-hidden outline-none"
                 >
                     {/* Header */}
                     <div className="px-8 py-6 border-b border-border bg-card/20 flex items-center justify-between">
@@ -64,7 +72,7 @@ export const PostUploadModal: React.FC<PostUploadModalProps> = ({ isOpen, onClos
                                 <Check className="w-6 h-6 text-green-500" />
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold text-foreground tracking-tight">Upload Successful</h3>
+                                <h3 id="post-upload-title" className="text-xl font-bold text-foreground tracking-tight">Upload Successful</h3>
                                 <p className="text-xs text-foreground/40 font-bold uppercase tracking-widest mt-1">
                                     {documents.length} Document{documents.length > 1 ? 's' : ''} Ready
                                 </p>
@@ -72,6 +80,7 @@ export const PostUploadModal: React.FC<PostUploadModalProps> = ({ isOpen, onClos
                         </div>
                         <button 
                             onClick={onClose}
+                            aria-label="Close"
                             className="p-2 hover:bg-card rounded-xl text-foreground/40 hover:text-foreground transition-all"
                         >
                             <X className="w-5 h-5" />
@@ -91,6 +100,18 @@ export const PostUploadModal: React.FC<PostUploadModalProps> = ({ isOpen, onClos
                             <div 
                                 key={doc._id}
                                 onClick={() => documents.length > 1 && toggleSelect(doc._id)}
+                                {...(documents.length > 1 && {
+                                    role: "checkbox",
+                                    "aria-checked": selectedIds.includes(doc._id),
+                                    "aria-label": doc.name,
+                                    tabIndex: 0,
+                                    onKeyDown: (e: React.KeyboardEvent) => {
+                                        if (e.key === " " || e.key === "Enter") {
+                                            e.preventDefault();
+                                            toggleSelect(doc._id);
+                                        }
+                                    },
+                                })}
                                 className={`flex items-center justify-between p-4 rounded-3xl border transition-all duration-300 group ${
                                     documents.length === 1 
                                     ? "bg-card border-border" 

@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CloudUpload, Activity, Loader2 } from "lucide-react";
+import { useModalA11y } from "@/shared/hooks/useModalA11y";
 
 interface UploadingModalProps {
     isOpen: boolean;
@@ -12,6 +13,11 @@ interface UploadingModalProps {
 }
 
 export const UploadingModal: React.FC<UploadingModalProps> = ({ isOpen, progress, fileCount }) => {
+    // No onClose: an in-flight upload must not be dismissible (would hide progress).
+    // The hook still keeps focus inside the dialog while it is open.
+    const dialogRef = useRef<HTMLDivElement>(null);
+    useModalA11y(dialogRef, isOpen);
+
     if (!isOpen) return null;
 
     return (
@@ -27,10 +33,16 @@ export const UploadingModal: React.FC<UploadingModalProps> = ({ isOpen, progress
 
                 {/* Modal Container */}
                 <motion.div 
+                    ref={dialogRef}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="uploading-title"
+                    aria-busy="true"
+                    tabIndex={-1}
                     initial={{ scale: 0.9, opacity: 0, y: 20 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                    className="relative w-full max-w-md bg-card border border-border rounded-[2.5rem] shadow-2xl overflow-hidden p-8"
+                    className="relative w-full max-w-md bg-card border border-border rounded-[2.5rem] shadow-2xl overflow-hidden p-8 outline-none"
                 >
                     {/* Visual Accent */}
                     <div className="absolute inset-0 bg-linear-to-tr from-primary/10 to-transparent pointer-events-none" />
@@ -41,7 +53,7 @@ export const UploadingModal: React.FC<UploadingModalProps> = ({ isOpen, progress
                         </div>
 
                         <div className="text-center space-y-2 mb-8">
-                            <h3 className="text-2xl font-black text-foreground uppercase tracking-tighter">Uploading Assets</h3>
+                            <h3 id="uploading-title" className="text-2xl font-black text-foreground uppercase tracking-tighter">Uploading Assets</h3>
                             <div className="flex flex-col gap-1 items-center justify-center">
                                 <span className="text-[10px] font-black text-primary uppercase tracking-[0.3em] flex items-center gap-2">
                                     <Activity className="w-3 h-3" /> Neural Linking active
@@ -59,7 +71,14 @@ export const UploadingModal: React.FC<UploadingModalProps> = ({ isOpen, progress
                                 <span className="text-lg font-black text-foreground">{progress}%</span>
                             </div>
 
-                            <div className="h-4 w-full bg-background/50 rounded-2xl overflow-hidden border border-border p-1">
+                            <div
+                                role="progressbar"
+                                aria-label="Upload progress"
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-valuenow={progress}
+                                className="h-4 w-full bg-background/50 rounded-2xl overflow-hidden border border-border p-1"
+                            >
                                 <motion.div 
                                     initial={{ width: 0 }}
                                     animate={{ width: `${progress}%` }}
