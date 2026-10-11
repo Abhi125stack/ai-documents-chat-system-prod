@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import Chat from "@/models/Chat";
+import { findOrCreateChat } from "@/lib/chat";
 import { getUserIdFromHeader } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -17,22 +17,13 @@ export async function GET(
             return NextResponse.json({ message: "Unauthorized", success: false }, { status: 401 });
         }
 
-        let chat = await Chat.findOne({ userId, documentId: docId });
-
-        if (!chat) {
-            // Initialize a new chat with a welcome message if it doesn't exist
-            chat = await Chat.create({
-                userId,
-                documentId: docId,
-                messages: [
-                    {
-                        role: "assistant",
-                        content: "Hello! I'm your AI Assistant. I've analyzed this document. How can I help you today?",
-                        createdAt: new Date(),
-                    },
-                ],
-            });
-        }
+        const chat = await findOrCreateChat(userId, [docId], [
+            {
+                role: "assistant",
+                content: "Hello! I'm your AI Assistant. I've analyzed this document. How can I help you today?",
+                createdAt: new Date(),
+            },
+        ]);
 
         return NextResponse.json({
             message: "Chat fetched successfully!",
