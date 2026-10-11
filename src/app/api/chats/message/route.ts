@@ -4,9 +4,13 @@ import Chat from "@/models/Chat";
 import Document from "@/models/Document";
 import DocumentChunk from "@/models/DocumentChunk";
 import { getUserIdFromHeader } from "@/lib/auth";
+import { getErrorMessage } from "@/lib/utils";
 import { OpenRouter } from '@openrouter/sdk';
 import mongoose from "mongoose";
 import OpenAI from "openai";
+
+type ScoredChunk = { text: string; score: number };
+type ChunkDoc = { text: string; embedding?: number[]; chunkIndex: number };
 
 const openRouter = new OpenRouter({
     apiKey: process.env.OPENROUTER_AI_SECRET_KEY || '',
@@ -43,6 +47,9 @@ export async function POST(req: Request) {
 
         const body = await req.json();
         const { docId, docIds, content } = body;
+        // mode distinguishes a specific-fact question (qa, default) from a
+        // whole-document summary. Defaulting to "qa" keeps existing clients intact.
+        const mode: "qa" | "summary" = body.mode === "summary" ? "summary" : "qa";
 
         // Support both single and multiple IDs
         const targetIds = docIds || (docId ? [docId] : null);
@@ -63,16 +70,19 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Documents not found or access denied.", success: false }, { status: 404 });
         }
 
-        // 2. Extract embedding for the user's question
+        // 2. Extract embedding for the user's question (qa mode only — summary
+        //    selects chunks by position and does not need a query embedding).
         let questionEmbedding: number[] | null = null;
-        try {
-            const embedRes = await openai.embeddings.create({
-                model: "text-embedding-3-small",
-                input: content,
-            });
-            questionEmbedding = embedRes.data[0].embedding;
-        } catch (err) {
-            console.log("Failed to generate embedding for user question, falling back to keyword search.", err);
+        if (mode === "qa") {
+            try {
+                const embedRes = await openai.embeddings.create({
+                    model: "text-embedding-3-small",
+                    input: content,
+                });
+                questionEmbedding = embedRes.data[0].embedding;
+            } catch (err) {
+                console.log("Failed to generate embedding for user question, falling back to keyword search.", err);
+            }
         }
 
         // 3. Fetch chunks for target documents
@@ -85,12 +95,29 @@ export async function POST(req: Request) {
         );
         console.log("All chunks:", allChunks.length);
         
-        // 4. Score and select top relevant chunks
-        let topChunks = [];
-        
-        if (questionEmbedding && allChunks.some((c: any) => c.embedding && c.embedding.length > 0)) {
+        // 4. Select relevant chunks
+        let topChunks: string[] = [];
+
+        if (mode === "summary") {
+            // Summary: do NOT rank against the instruction string (that poisons
+            // retrieval with the query's own words). Pick representative coverage —
+            // the leading chunks plus an even stride sample across the document —
+            // ordered by position so the model sees a faithful cross-section.
+            const ordered = [...allChunks].sort(
+                (a: ChunkDoc, b: ChunkDoc) => a.chunkIndex - b.chunkIndex
+            );
+            const MAX = 6;
+            if (ordered.length <= MAX) {
+                topChunks = ordered.map((c: ChunkDoc) => c.text);
+            } else {
+                const stride = Math.ceil(ordered.length / MAX);
+                for (let i = 0; i < ordered.length && topChunks.length < MAX; i += stride) {
+                    topChunks.push(ordered[i].text);
+                }
+            }
+        } else if (questionEmbedding && allChunks.some((c: ChunkDoc) => c.embedding && c.embedding.length > 0)) {
             // Semantic Search using Cosine Similarity
-            const scoredChunks = allChunks.map((chunk: any) => {
+            const scoredChunks: ScoredChunk[] = allChunks.map((chunk: ChunkDoc) => {
                 const score = (chunk.embedding && chunk.embedding.length > 0) 
                     ? cosineSimilarity(questionEmbedding!, chunk.embedding)
                     : 0;
@@ -98,14 +125,14 @@ export async function POST(req: Request) {
             });
             
             // Sort by highest similarity
-            scoredChunks.sort((a: any, b: any) => b.score - a.score);
+            scoredChunks.sort((a: ScoredChunk, b: ScoredChunk) => b.score - a.score);
             
             // Pick top 5 chunks
-            topChunks = scoredChunks.slice(0, 5).map((c: any) => c.text);
+            topChunks = scoredChunks.slice(0, 5).map((c: ScoredChunk) => c.text);
         } else {
             // Fallback: Basic Keyword Search
             const searchTerms = content.toLowerCase().split(/\s+/).filter((word: string) => word.length > 3);
-            const scoredChunks = allChunks.map((chunk: any) => {
+            const scoredChunks: ScoredChunk[] = allChunks.map((chunk: ChunkDoc) => {
                 let score = 0;
                 const chunkText = chunk.text.toLowerCase();
                 for (const term of searchTerms) {
@@ -115,10 +142,10 @@ export async function POST(req: Request) {
             });
             
             // Sort by highest occurrence matches
-            scoredChunks.sort((a: any, b: any) => b.score - a.score);
+            scoredChunks.sort((a: ScoredChunk, b: ScoredChunk) => b.score - a.score);
             
             // Pick top 5 chunks
-            topChunks = scoredChunks.slice(0, 5).map((c: any) => c.text);
+            topChunks = scoredChunks.slice(0, 5).map((c: ScoredChunk) => c.text);
         }
 
         const excerpts = topChunks.length > 0 
@@ -127,7 +154,14 @@ export async function POST(req: Request) {
 
         const systemPrompt = {
             role: "system",
-            content: `You are an AI assistant answering strictly from the provided document excerpts.
+            content: mode === "summary"
+                ? `You are an AI assistant. Summarize the document using the provided excerpts.
+The excerpts are a representative cross-section of the document; base the summary only on them.
+Do not refuse for missing specifics — summarize what is present.
+
+Document Excerpts:
+${excerpts}`
+                : `You are an AI assistant answering strictly from the provided document excerpts.
 If the answer is not found in the excerpts, say you could not find it.
 
 Document Excerpts:
@@ -154,7 +188,7 @@ ${excerpts}`
         }
 
         // 6. Prepare message history for OpenAI
-        const messageHistory = chat.messages.map((msg: any) => ({
+        const messageHistory = chat.messages.map((msg: { role: string; content: string }) => ({
             role: msg.role,
             content: msg.content,
         }));
@@ -166,21 +200,30 @@ ${excerpts}`
                 throw new Error("Missing AI API key in environment variables.");
             }
 
+            const chatMessages = [
+                systemPrompt,
+                ...messageHistory,
+                { role: "user", content: content },
+            ];
+
             const completion = await openRouter.chat.send({
                 chatGenerationParams: {
                     model: 'openai/gpt-3.5-turbo', 
-                    messages: [systemPrompt, ...messageHistory, { role: "user", content: content }] as any,
+                    // OpenRouter SDK's message union is stricter than our role:string shape;
+                    // the runtime payload is correct, only the compile-time union differs.
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    messages: chatMessages as any,
                     stream: false,
                 }
             });
 
             aiResponse = completion.choices[0].message.content;
             console.log("AI Response:", completion.choices);
-        } catch (openAiError: any) {
+        } catch (openAiError: unknown) {
             console.error("AI API ERROR:", openAiError);
             return NextResponse.json({ 
                 message: "AI Gateway error.", 
-                error: openAiError.message, 
+                error: getErrorMessage(openAiError), 
                 success: false 
             }, { status: 502 }); 
         }
@@ -206,11 +249,11 @@ ${excerpts}`
             chat,
         }, { status: 200 });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("ROOT Chat with AI error:", err);
         return NextResponse.json({ 
             message: "A critical error occurred in the chat processing system.", 
-            error: err.message, 
+            error: getErrorMessage(err), 
             success: false 
         }, { status: 500 });
     }

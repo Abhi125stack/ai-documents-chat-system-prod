@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import Document from "@/models/Document";
 import Chat from "@/models/Chat";
 import { getUserIdFromHeader } from "@/lib/auth";
+import { getErrorMessage } from "@/lib/utils";
 import { GridFSBucket } from "mongodb";
 import mongoose from "mongoose";
 
@@ -41,11 +42,11 @@ export async function GET(
             document,
         }, { status: 200 });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("Fetch document error:", err);
         return NextResponse.json({ 
             message: "Failed to fetch document.", 
-            error: err.message, 
+            error: getErrorMessage(err), 
             success: false 
         }, { status: 500 });
     }
@@ -81,8 +82,8 @@ export async function DELETE(
             });
             try {
                 await bucket.delete(new mongoose.Types.ObjectId(doc.fileId));
-            } catch (gridFsError: any) {
-                console.warn("GridFS deletion error (might already be gone):", gridFsError.message);
+            } catch (gridFsError: unknown) {
+                console.warn("GridFS deletion error (might already be gone):", getErrorMessage(gridFsError));
             }
         }
 
@@ -97,11 +98,11 @@ export async function DELETE(
             success: true,
         }, { status: 200 });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("Delete document error:", err);
         return NextResponse.json({ 
             message: "Failed to delete document.", 
-            error: err.message, 
+            error: getErrorMessage(err), 
             success: false 
         }, { status: 500 });
     }

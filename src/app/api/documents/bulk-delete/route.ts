@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import Document from "@/models/Document";
 import Chat from "@/models/Chat";
 import { getUserIdFromHeader } from "@/lib/auth";
+import { getErrorMessage } from "@/lib/utils";
 import { GridFSBucket } from "mongodb";
 import mongoose from "mongoose";
 
@@ -40,8 +41,8 @@ export async function POST(req: Request) {
             if (doc.fileId) {
                 try {
                     await bucket.delete(new mongoose.Types.ObjectId(doc.fileId));
-                } catch (gridFsError: any) {
-                    console.warn(`GridFS deletion error for file ${doc.fileId}:`, gridFsError.message);
+                } catch (gridFsError: unknown) {
+                    console.warn(`GridFS deletion error for file ${doc.fileId}:`, getErrorMessage(gridFsError));
                 }
             }
         }
@@ -59,11 +60,11 @@ export async function POST(req: Request) {
             success: true,
         }, { status: 200 });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("Bulk delete documents error:", err);
         return NextResponse.json({ 
             message: "Failed to delete documents.", 
-            error: err.message, 
+            error: getErrorMessage(err), 
             success: false 
         }, { status: 500 });
     }

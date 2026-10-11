@@ -11,7 +11,7 @@ interface UploadingModalProps {
     fileCount: number;
 }
 
-export const UploadingModal: React.FC<UploadingModalProps> = ({ isOpen, progress, fileName, fileCount }) => {
+export const UploadingModal: React.FC<UploadingModalProps> = ({ isOpen, progress, fileCount }) => {
     if (!isOpen) return null;
 
     return (

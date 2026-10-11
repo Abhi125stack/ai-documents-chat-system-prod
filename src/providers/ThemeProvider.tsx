@@ -14,14 +14,15 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("dark");
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // Mount-time init: read persisted theme and sync the <html> class.
+    // Setting state here is the correct one-shot hydration pattern.
     const savedTheme = localStorage.getItem("theme") as Theme | null;
     const initialTheme = savedTheme || "dark";
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setThemeState(initialTheme);
     document.documentElement.classList.toggle("dark", initialTheme === "dark");
-    setMounted(true);
   }, []);
 
   const setTheme = (newTheme: Theme) => {

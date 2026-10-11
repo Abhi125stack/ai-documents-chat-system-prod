@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import { generateToken, generateRefreshToken } from "@/lib/jwt";
+import { getErrorMessage } from "@/lib/utils";
 
 export async function POST(req: Request) {
     try {
@@ -55,10 +56,10 @@ export async function POST(req: Request) {
             },
             { status: 201 }
         );
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("Signup error:", err);
         return NextResponse.json(
-            { message: "An error occurred during registration.", error: err.message, success: false },
+            { message: "An error occurred during registration.", error: getErrorMessage(err), success: false },
             { status: 500 }
         );
     }

@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
-import { Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, ArrowLeft, Layers } from "lucide-react";
+import { Loader2, ZoomIn, ZoomOut, ArrowLeft, Layers } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { FixedSizeList as List, VariableSizeList } from "react-window";
+import { VariableSizeList } from "react-window";
 import { AutoSizer } from "react-virtualized-auto-sizer";
+import { DocumentMetadata } from "@/types";
 
 // Use CDNs for worker as it's hard to configure with Next.js/Webpack easily.
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -13,8 +14,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLi
 interface PDFViewerProps {
     fileUrl: string;
     docName?: string;
-    onAnalyze?: (doc: any) => void;
-    docDetails?: any;
+    onAnalyze?: (doc?: DocumentMetadata) => void;
+    docDetails?: DocumentMetadata;
 }
 
 // Single Page Component for the Main Viewer

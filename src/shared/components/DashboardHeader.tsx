@@ -4,12 +4,10 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
-  Bell, 
   User, 
   FileText, 
   LayoutDashboard, 
   MessageSquare,
-  Search,
   LogOut,
   ChevronDown
 } from 'lucide-react';
@@ -29,8 +27,10 @@ export const DashboardHeader: React.FC = () => {
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
 
   useEffect(() => {
+    // Mount-time load of the persisted user from localStorage.
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUser(JSON.parse(savedUser));
     }
   }, []);

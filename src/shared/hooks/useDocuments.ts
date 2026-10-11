@@ -1,8 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/axios";
 import { toast } from "sonner";
+import { AxiosError } from "axios";
 
 import { DocumentMetadata, UploadResponse } from "@/types";
+
+type ApiErrorData = { message?: string };
 
 export const useDocuments = (search?: string) => {
     const queryClient = useQueryClient();
@@ -39,7 +42,7 @@ export const useDocuments = (search?: string) => {
             toast.success(data.message || "Upload complete!");
             queryClient.invalidateQueries({ queryKey: ["documents"] });
         },
-        onError: (error: any) => {
+        onError: (error: AxiosError<ApiErrorData>) => {
             const message = error.response?.data?.message || "Upload failed. Please try again.";
             toast.error(message);
         },
@@ -54,7 +57,7 @@ export const useDocuments = (search?: string) => {
             toast.success(data.message || "Document deleted!");
             queryClient.invalidateQueries({ queryKey: ["documents"] });
         },
-        onError: (error: any) => {
+        onError: (error: AxiosError<ApiErrorData>) => {
             const message = error.response?.data?.message || "Delete failed.";
             toast.error(message);
         },
@@ -69,7 +72,7 @@ export const useDocuments = (search?: string) => {
             toast.success(data.message || "Documents deleted!");
             queryClient.invalidateQueries({ queryKey: ["documents"] });
         },
-        onError: (error: any) => {
+        onError: (error: AxiosError<ApiErrorData>) => {
             const message = error.response?.data?.message || "Delete failed.";
             toast.error(message);
         },

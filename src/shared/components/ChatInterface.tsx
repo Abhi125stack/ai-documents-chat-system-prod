@@ -3,13 +3,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/axios";
-import { Message, ChatMetadata } from "@/types";
+import { Message, ChatMetadata, DocumentMetadata } from "@/types";
 import { Loader2, Send, Cpu, Sparkles, Copy, Check } from "lucide-react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 
 interface ChatInterfaceProps {
     docIds: string[];
-    onAnalyzeTrigger?: (ref: { analyze: (doc: any) => void }) => void;
+    onAnalyzeTrigger?: (ref: { analyze: (doc?: DocumentMetadata) => void }) => void;
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ docIds, onAnalyzeTrigger }) => {
@@ -32,23 +32,28 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ docIds, onAnalyzeT
 
     useEffect(() => {
         if (data?.chat?.messages) {
+            // Sync server-fetched messages into local state when the query resolves.
             setLocalMessages(data.chat.messages);
         }
     }, [data?.chat?.messages]);
 
     const mutation = useMutation({
-        mutationFn: async (content: string) => {
+        mutationFn: async (vars: { content: string; mode?: "qa" | "summary" }) => {
             setErrorMsg(null);
-            const res = await api.post("/chats/message", { docIds, content });
+            const res = await api.post("/chats/message", {
+                docIds,
+                content: vars.content,
+                mode: vars.mode ?? "qa",
+            });
             return res.data;
         },
-        onMutate: async (content) => {
-            const isSystemAction = content.startsWith("[SYSTEM_ACTION]");
-            if (isSystemAction) return null;
+        onMutate: async (vars) => {
+            // A summary action has no user-authored message to echo optimistically.
+            if (vars.mode === "summary") return null;
 
             const optimisticMsg: Message = {
                 role: "user",
-                content,
+                content: vars.content,
                 createdAt: new Date().toISOString(),
             };
             setLocalMessages(prev => [...prev, optimisticMsg]);
@@ -58,7 +63,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ docIds, onAnalyzeT
             queryClient.invalidateQueries({ queryKey: ["chat", idsKey] });
             setInput("");
         },
-        onError: (err: any, content, context) => {
+        onError: (err: { response?: { data?: { message?: string } }; message?: string }, _vars, context) => {
             const apiError = err.response?.data?.message || err.message || "Failed to connect to AI Core.";
             setErrorMsg(apiError);
             if (context?.optimisticMsg) {
@@ -78,17 +83,26 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ docIds, onAnalyzeT
     useEffect(() => {
         if (onAnalyzeTrigger) {
             onAnalyzeTrigger({
-                analyze: (doc: any) => {
-                    const prompt = `[SYSTEM_ACTION] Contextualizing "${doc.name}"... Please provide a 200-word summary and confirm the total pages (${doc.pages || 'unknown'}).`;
-                    mutation.mutate(prompt);
+                analyze: () => {
+                    // Summary mode: the content is a plain instruction (no filename,
+                    // no [SYSTEM_ACTION] marker) so it never poisons retrieval, and
+                    // the server selects representative chunks instead of ranking
+                    // against this string.
+                    mutation.mutate({
+                        content: "Provide a concise ~200-word summary of this document.",
+                        mode: "summary",
+                    });
                 }
             });
         }
+        // `mutation` is intentionally omitted: re-registering the trigger on every
+        // mutation state change would thrash the parent callback. idsKey is the real key.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [onAnalyzeTrigger, idsKey]);
 
     const handleSend = () => {
         if (!input.trim() || mutation.isPending) return;
-        mutation.mutate(input);
+        mutation.mutate({ content: input, mode: "qa" });
     };
 
     const handleKeyPress = (e: React.KeyboardEvent) => {

@@ -5,7 +5,6 @@ import {
   MessageSquare, 
   Clock,
   Loader2,
-  Inbox,
   ChevronRight,
   FileText
 } from "lucide-react";
@@ -33,7 +32,7 @@ export const ChatHistoryList: React.FC = () => {
         </div>
             <h3 className="text-xl font-bold text-foreground mb-2">No conversations yet</h3>
             <p className="text-foreground/50 max-w-sm mx-auto leading-relaxed text-sm">
-          Start a new conversation by opening any of your documents and clicking the "Chat" button.
+          Start a new conversation by opening any of your documents and clicking the &quot;Chat&quot; button.
         </p>
       </div>
     );

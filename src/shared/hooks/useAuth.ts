@@ -2,8 +2,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/axios";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { AxiosError } from "axios";
 
 import { AuthResponse, LoginCredentials, SignupData } from "@/types";
+
+type ApiErrorData = { message?: string };
 
 export const useAuth = () => {
   const router = useRouter();
@@ -27,7 +30,7 @@ export const useAuth = () => {
         queryClient.invalidateQueries({ queryKey: ["user"] });
       }
     },
-    onError: (error: any) => {
+    onError: (error: AxiosError<ApiErrorData>) => {
       const message = error.response?.data?.message || "Login failed. Please check your credentials.";
       toast.error(message);
     },
@@ -51,7 +54,7 @@ export const useAuth = () => {
         queryClient.invalidateQueries({ queryKey: ["user"] });
       }
     },
-    onError: (error: any) => {
+    onError: (error: AxiosError<ApiErrorData>) => {
       const message = error.response?.data?.message || "Registration failed. Email might already be taken.";
       toast.error(message);
     },

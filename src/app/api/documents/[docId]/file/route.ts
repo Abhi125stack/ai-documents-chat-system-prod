@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Document from "@/models/Document";
 import { getUserIdFromHeader } from "@/lib/auth";
+import { getErrorMessage } from "@/lib/utils";
 import { GridFSBucket } from "mongodb";
 import mongoose from "mongoose";
 
@@ -70,11 +71,11 @@ export async function GET(
             },
         });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("Stream file error:", err);
         return NextResponse.json({ 
             message: "Failed to stream document.", 
-            error: err.message, 
+            error: getErrorMessage(err), 
             success: false 
         }, { status: 500 });
     }

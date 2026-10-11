@@ -1,13 +1,16 @@
 export const runtime = "nodejs";
+// Must be first: installs DOMMatrix/Path2D/ImageData before pdf-parse (pdfjs-dist)
+// evaluates them at module load in the Node server bundle.
+import "@/lib/pdf-polyfill";
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import Document from "@/models/Document";
+import Document, { IDocument } from "@/models/Document";
 import DocumentChunk from "@/models/DocumentChunk";
 import { getUserIdFromHeader } from "@/lib/auth";
 import { GridFSBucket } from "mongodb";
 import mongoose from "mongoose";
 import { Readable } from "stream";
-import { DocumentMetadata } from "@/types";
+import { getErrorMessage } from "@/lib/utils";
 import { PDFParse } from "pdf-parse";
 import OpenAI from "openai";
 import path from "path";
@@ -22,7 +25,7 @@ try {
   console.log("PDFParse worker resolved to:", workerUrl);
 } catch (e) {
   console.warn("Failed to set PDFParse worker path, letting it fall back to default/fake worker.", e);
-  try { PDFParse.setWorker(undefined); } catch (e2) {}
+  try { PDFParse.setWorker(undefined); } catch {}
 }
 
 const openai = new OpenAI({
@@ -67,7 +70,7 @@ export async function POST(req: Request) {
             bucketName: "documents",
         });
 
-        const uploadedDocs: any[] = [];
+        const uploadedDocs: IDocument[] = [];
 
         for (const file of files) {
             const buffer = Buffer.from(await file.arrayBuffer());
@@ -182,11 +185,11 @@ export async function POST(req: Request) {
             })),
         }, { status: 201 });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("CRITICAL API FAILURE [Upload]:", err);
         return NextResponse.json({ 
             message: "A critical error occurred during upload.", 
-            error: err.message, 
+            error: getErrorMessage(err), 
             success: false 
         }, { status: 500 });
     }

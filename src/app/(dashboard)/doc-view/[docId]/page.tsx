@@ -63,7 +63,7 @@ export default function DocumentViewPage({ params }: { params: Promise<{ docId: 
     const decodedDocId = decodeURIComponent(rawDocId);
     const idArray = decodedDocId.split(/,|%2C/).filter(id => id.trim() !== "");
     const [activeDocIndex, setActiveDocIndex] = React.useState(0);
-    const analyzeRef = React.useRef<{ analyze: (doc: any) => void }>(null);
+    const analyzeRef = React.useRef<{ analyze: (doc?: DocumentMetadata) => void }>(null);
 
     const { data, isLoading, error } = useQuery<DocumentResponse>({
         queryKey: ["documents", decodedDocId],
@@ -156,7 +156,7 @@ export default function DocumentViewPage({ params }: { params: Promise<{ docId: 
                                 </div>
                                 <div className="space-y-2">
                                                 <h3 className="text-2xl font-black text-foreground uppercase tracking-tighter">Neural Synthesis...</h3>
-                                                <p className="text-foreground/50 font-medium text-sm tracking-tight">Indexing "{currentDoc.name}" into Collective Memory.</p>
+                                                <p className="text-foreground/50 font-medium text-sm tracking-tight">Indexing &quot;{currentDoc.name}&quot; into Collective Memory.</p>
                                 </div>
                             </div>
                         )}
@@ -171,7 +171,7 @@ export default function DocumentViewPage({ params }: { params: Promise<{ docId: 
                             <Suspense fallback={<ChatSkeleton />}>
                                     <ChatInterface 
                                         docIds={idArrayForChat}
-                                        onAnalyzeTrigger={(ref) => { (analyzeRef as any).current = ref; }}
+                                        onAnalyzeTrigger={(ref) => { analyzeRef.current = ref; }}
                                     />
                             </Suspense>
                         )}
