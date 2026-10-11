@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Chat from "@/models/Chat";
 import { getUserIdFromHeader } from "@/lib/auth";
+import { getErrorMessage } from "@/lib/utils";
 import mongoose from "mongoose";
 
 export async function GET(req: Request) {
@@ -42,7 +43,7 @@ export async function GET(req: Request) {
         }
 
         if (!chat) {
-            const chatData: any = {
+            const chatData: Record<string, unknown> = {
                 userId,
                 messages: [
                     {
@@ -68,11 +69,11 @@ export async function GET(req: Request) {
             chat,
         }, { status: 200 });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("Fetch chat error:", err);
         return NextResponse.json({ 
             message: "Failed to fetch chat.", 
-            error: err.message, 
+            error: getErrorMessage(err), 
             success: false 
         }, { status: 500 });
     }

@@ -1,8 +1,7 @@
 "use client";
 
 import { ChatHistoryList } from '@/shared/components/ChatHistoryList';
-import { Search, MessageSquare } from 'lucide-react';
-import { Input } from '@/shared/components/ui/input';
+import { MessageSquare } from 'lucide-react';
 
 export default function ChatHistoryPage() {
   return (

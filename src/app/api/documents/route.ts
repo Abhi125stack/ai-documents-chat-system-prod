@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Document from "@/models/Document";
 import { getUserIdFromHeader } from "@/lib/auth";
+import { getErrorMessage } from "@/lib/utils";
 
 export async function GET(req: Request) {
     try {
@@ -11,7 +12,7 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url);
         const name = searchParams.get("name");
 
-        const query: any = { userId };
+        const query: Record<string, unknown> = { userId };
         if (name) {
             query.name = { $regex: name, $options: "i" };
         }
@@ -24,11 +25,11 @@ export async function GET(req: Request) {
             documents,
         }, { status: 200 });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("Fetch documents error:", err);
         return NextResponse.json({ 
             message: "Failed to fetch documents.", 
-            error: err.message, 
+            error: getErrorMessage(err), 
             success: false 
         }, { status: 500 });
     }

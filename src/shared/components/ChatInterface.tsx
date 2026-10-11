@@ -3,13 +3,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/axios";
-import { Message, ChatMetadata } from "@/types";
+import { Message, ChatMetadata, DocumentMetadata } from "@/types";
 import { Loader2, Send, Cpu, Sparkles, Copy, Check } from "lucide-react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 
 interface ChatInterfaceProps {
     docIds: string[];
-    onAnalyzeTrigger?: (ref: { analyze: (doc: any) => void }) => void;
+    onAnalyzeTrigger?: (ref: { analyze: (doc?: DocumentMetadata) => void }) => void;
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ docIds, onAnalyzeTrigger }) => {
@@ -32,6 +32,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ docIds, onAnalyzeT
 
     useEffect(() => {
         if (data?.chat?.messages) {
+            // Sync server-fetched messages into local state when the query resolves.
             setLocalMessages(data.chat.messages);
         }
     }, [data?.chat?.messages]);
@@ -58,7 +59,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ docIds, onAnalyzeT
             queryClient.invalidateQueries({ queryKey: ["chat", idsKey] });
             setInput("");
         },
-        onError: (err: any, content, context) => {
+        onError: (err: { response?: { data?: { message?: string } }; message?: string }, content, context) => {
             const apiError = err.response?.data?.message || err.message || "Failed to connect to AI Core.";
             setErrorMsg(apiError);
             if (context?.optimisticMsg) {
@@ -78,12 +79,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ docIds, onAnalyzeT
     useEffect(() => {
         if (onAnalyzeTrigger) {
             onAnalyzeTrigger({
-                analyze: (doc: any) => {
-                    const prompt = `[SYSTEM_ACTION] Contextualizing "${doc.name}"... Please provide a 200-word summary and confirm the total pages (${doc.pages || 'unknown'}).`;
+                analyze: (doc?: DocumentMetadata) => {
+                    const prompt = `[SYSTEM_ACTION] Contextualizing "${doc?.name ?? "document"}"... Please provide a 200-word summary and confirm the total pages (${doc?.pages || 'unknown'}).`;
                     mutation.mutate(prompt);
                 }
             });
         }
+        // `mutation` is intentionally omitted: re-registering the trigger on every
+        // mutation state change would thrash the parent callback. idsKey is the real key.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [onAnalyzeTrigger, idsKey]);
 
     const handleSend = () => {

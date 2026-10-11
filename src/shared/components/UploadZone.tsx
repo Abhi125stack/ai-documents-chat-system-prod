@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, FilePlus, ShieldCheck, X, Loader2 } from 'lucide-react';
+import { Upload, FilePlus, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/shared/components/ui/button';
 import { useDocuments } from '@/shared/hooks/useDocuments';

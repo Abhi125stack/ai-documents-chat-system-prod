@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateToken, verifyRefreshToken } from "@/lib/jwt";
+import { getErrorMessage } from "@/lib/utils";
 
 export async function POST(req: Request) {
     try {
@@ -30,9 +31,9 @@ export async function POST(req: Request) {
             },
             { status: 200 }
         );
-    } catch (error: any) {
+    } catch (error: unknown) {
         return NextResponse.json(
-            { message: "Refresh failed", error: error.message, success: false },
+            { message: "Refresh failed", error: getErrorMessage(error), success: false },
             { status: 500 }
         );
     }

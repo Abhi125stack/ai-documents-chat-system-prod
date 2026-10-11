@@ -2,8 +2,7 @@
 
 import React, { useState } from 'react';
 import { DocumentList } from '@/shared/components/DocumentList';
-import { Search, Filter, Plus } from 'lucide-react';
-import { Button } from '@/shared/components/ui/button';
+import { Search } from 'lucide-react';
 import { Input } from '@/shared/components/ui/input';
 import { useDebounce } from '@/shared/hooks/useDebounce';
 

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-const Tabs = ({ value, className, children }: { value: string, className?: string, children: React.ReactNode }) => {
+const Tabs = ({ className, children }: { value: string, className?: string, children: React.ReactNode }) => {
     return (
         <div className={cn("inline-flex h-12 items-center justify-center rounded-xl bg-neutral-900/50 p-1 text-neutral-400 border border-neutral-800", className)}>
             {children}
@@ -19,7 +19,7 @@ const TabsList = ({ className, children }: { className?: string, children: React
     );
 };
 
-const TabsTrigger = ({ value, onClick, children, className }: { value: string, onClick?: () => void, children: React.ReactNode, className?: string }) => {
+const TabsTrigger = ({ onClick, children, className }: { value: string, onClick?: () => void, children: React.ReactNode, className?: string }) => {
     return (
         <button
             onClick={onClick}

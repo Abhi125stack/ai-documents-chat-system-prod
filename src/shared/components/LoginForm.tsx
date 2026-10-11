@@ -8,12 +8,14 @@ import { Input } from "@/shared/components/ui/input";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { Loader2, Eye, EyeOff } from "lucide-react";
 
+type LoginFormValues = { email: string; password: string };
+
 export default function LoginForm() {
     const { login, isLoggingIn } = useAuth();
-    const { register, handleSubmit, formState: { errors } } = useForm();
+    const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>();
     const [showPassword, setShowPassword] = useState(false);
 
-    const onSubmit = (data: any) => {
+    const onSubmit = (data: LoginFormValues) => {
         login(data);
     };
 
@@ -33,7 +35,7 @@ export default function LoginForm() {
                     className="h-14 pl-12 rounded-2xl bg-[#172539] border-slate-800 text-white placeholder:text-slate-500 focus:bg-[#0a1120] transition-all duration-300"
                     {...register("email", { required: "Email is required" })}
                 />
-                {errors.email && <span className="text-xs text-red-500 mt-1 pl-2">{(errors.email as any).message}</span>}
+                {errors.email && <span className="text-xs text-red-500 mt-1 pl-2">{errors.email.message}</span>}
             </div>
 
             <div className="relative group overflow-hidden rounded-2xl transition-all duration-300">
@@ -53,7 +55,7 @@ export default function LoginForm() {
                 >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
-                {errors.password && <span className="text-xs text-red-500 mt-1 pl-2">{(errors.password as any).message}</span>}
+                {errors.password && <span className="text-xs text-red-500 mt-1 pl-2">{errors.password.message}</span>}
             </div>
 
             <Button 

@@ -10,7 +10,7 @@ export const getUserIdFromHeader = (req: Request) => {
         const token = authHeader.split(" ")[1];
         const decoded = verifyToken(token);
         return decoded?.userId || null;
-    } catch (error) {
+    } catch {
         return null;
     }
 };

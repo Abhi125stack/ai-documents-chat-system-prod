@@ -19,6 +19,8 @@ export const useAuthGuard = (requireAuth: boolean = true) => {
             // User is on an auth page but already authenticated
             router.replace("/dashboard");
         } else {
+            // Auth check passed for this route; release the loading gate.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setIsLoading(false);
         }
     }, [requireAuth, router, pathname]);
