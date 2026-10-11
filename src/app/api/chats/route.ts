@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import Chat from "@/models/Chat";
+import { findOrCreateChat } from "@/lib/chat";
 import { getUserIdFromHeader } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/utils";
 import mongoose from "mongoose";
@@ -31,37 +31,13 @@ export async function GET(req: Request) {
             return NextResponse.json({ message: `Invalid ID format detected: ${invalidIds.join(', ')}`, success: false }, { status: 400 });
         }
 
-        let chat;
-        if (docIds.length === 1) {
-            chat = await Chat.findOne({ userId, documentId: docIds[0] });
-        } else {
-            // Find chat that contains exactly these IDs
-            chat = await Chat.findOne({ 
-                userId, 
-                documentIds: { $size: docIds.length, $all: docIds } 
-            });
-        }
-
-        if (!chat) {
-            const chatData: Record<string, unknown> = {
-                userId,
-                messages: [
-                    {
-                        role: "assistant",
-                        content: `Hello! I'm your AI Assistant. I've contextualized ${docIds.length > 1 ? `these ${docIds.length} documents` : "this document"}. How can I help you today?`,
-                        createdAt: new Date(),
-                    },
-                ],
-            };
-
-            if (docIds.length === 1) {
-                chatData.documentId = docIds[0];
-            } else {
-                chatData.documentIds = docIds;
-            }
-
-            chat = await Chat.create(chatData);
-        }
+        const chat = await findOrCreateChat(userId, docIds, [
+            {
+                role: "assistant",
+                content: `Hello! I'm your AI Assistant. I've contextualized ${docIds.length > 1 ? `these ${docIds.length} documents` : "this document"}. How can I help you today?`,
+                createdAt: new Date(),
+            },
+        ]);
 
         return NextResponse.json({
             message: "Chat fetched successfully!",

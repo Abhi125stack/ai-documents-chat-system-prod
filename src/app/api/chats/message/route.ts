@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import Chat from "@/models/Chat";
+import { findOrCreateChat } from "@/lib/chat";
 import Document from "@/models/Document";
 import DocumentChunk from "@/models/DocumentChunk";
 import { getUserIdFromHeader } from "@/lib/auth";
@@ -85,13 +85,13 @@ export async function POST(req: Request) {
             }
         }
 
-        // 3. Fetch chunks for target documents
-        const objectIds = targetIds.map((id: string) =>
-            new mongoose.Types.ObjectId(id)
-        );
+        // 3. Fetch chunks — only for documents verified as owned in step 1, and
+        //    scoped by userId at the chunk layer too (defense in depth: retrieval
+        //    can never read another user's chunks even if the id list changes).
+        const ownedDocIds = documents.map((d: { _id: mongoose.Types.ObjectId }) => d._id);
 
         const allChunks = await DocumentChunk.find(
-            { documentId: { $in: objectIds } }
+            { documentId: { $in: ownedDocIds }, userId }
         );
         console.log("All chunks:", allChunks.length);
         
@@ -168,24 +168,8 @@ Document Excerpts:
 ${excerpts}`
         };
 
-        // 5. Find or create Chat
-        let chat;
-        if (targetIds.length === 1) {
-            chat = await Chat.findOne({ userId, documentId: targetIds[0] });
-        } else {
-            chat = await Chat.findOne({ 
-                userId, 
-                documentIds: { $size: targetIds.length, $all: targetIds } 
-            });
-        }
-
-        if (!chat) {
-            chat = new Chat({
-                userId,
-                ...(targetIds.length === 1 ? { documentId: targetIds[0] } : { documentIds: targetIds }),
-                messages: [],
-            });
-        }
+        // 5. Find or create Chat (atomic upsert on (userId, docKey) — see lib/chat.ts)
+        const chat = await findOrCreateChat(userId, targetIds);
 
         // 6. Prepare message history for OpenAI
         const messageHistory = chat.messages.map((msg: { role: string; content: string }) => ({
