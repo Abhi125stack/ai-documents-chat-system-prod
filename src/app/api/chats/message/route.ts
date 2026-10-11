@@ -10,7 +10,7 @@ import mongoose from "mongoose";
 import OpenAI from "openai";
 
 type ScoredChunk = { text: string; score: number };
-type ChunkDoc = { text: string; embedding?: number[] };
+type ChunkDoc = { text: string; embedding?: number[]; chunkIndex: number };
 
 const openRouter = new OpenRouter({
     apiKey: process.env.OPENROUTER_AI_SECRET_KEY || '',
@@ -47,6 +47,9 @@ export async function POST(req: Request) {
 
         const body = await req.json();
         const { docId, docIds, content } = body;
+        // mode distinguishes a specific-fact question (qa, default) from a
+        // whole-document summary. Defaulting to "qa" keeps existing clients intact.
+        const mode: "qa" | "summary" = body.mode === "summary" ? "summary" : "qa";
 
         // Support both single and multiple IDs
         const targetIds = docIds || (docId ? [docId] : null);
@@ -67,16 +70,19 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Documents not found or access denied.", success: false }, { status: 404 });
         }
 
-        // 2. Extract embedding for the user's question
+        // 2. Extract embedding for the user's question (qa mode only — summary
+        //    selects chunks by position and does not need a query embedding).
         let questionEmbedding: number[] | null = null;
-        try {
-            const embedRes = await openai.embeddings.create({
-                model: "text-embedding-3-small",
-                input: content,
-            });
-            questionEmbedding = embedRes.data[0].embedding;
-        } catch (err) {
-            console.log("Failed to generate embedding for user question, falling back to keyword search.", err);
+        if (mode === "qa") {
+            try {
+                const embedRes = await openai.embeddings.create({
+                    model: "text-embedding-3-small",
+                    input: content,
+                });
+                questionEmbedding = embedRes.data[0].embedding;
+            } catch (err) {
+                console.log("Failed to generate embedding for user question, falling back to keyword search.", err);
+            }
         }
 
         // 3. Fetch chunks for target documents
@@ -89,10 +95,27 @@ export async function POST(req: Request) {
         );
         console.log("All chunks:", allChunks.length);
         
-        // 4. Score and select top relevant chunks
+        // 4. Select relevant chunks
         let topChunks: string[] = [];
-        
-        if (questionEmbedding && allChunks.some((c: ChunkDoc) => c.embedding && c.embedding.length > 0)) {
+
+        if (mode === "summary") {
+            // Summary: do NOT rank against the instruction string (that poisons
+            // retrieval with the query's own words). Pick representative coverage —
+            // the leading chunks plus an even stride sample across the document —
+            // ordered by position so the model sees a faithful cross-section.
+            const ordered = [...allChunks].sort(
+                (a: ChunkDoc, b: ChunkDoc) => a.chunkIndex - b.chunkIndex
+            );
+            const MAX = 6;
+            if (ordered.length <= MAX) {
+                topChunks = ordered.map((c: ChunkDoc) => c.text);
+            } else {
+                const stride = Math.ceil(ordered.length / MAX);
+                for (let i = 0; i < ordered.length && topChunks.length < MAX; i += stride) {
+                    topChunks.push(ordered[i].text);
+                }
+            }
+        } else if (questionEmbedding && allChunks.some((c: ChunkDoc) => c.embedding && c.embedding.length > 0)) {
             // Semantic Search using Cosine Similarity
             const scoredChunks: ScoredChunk[] = allChunks.map((chunk: ChunkDoc) => {
                 const score = (chunk.embedding && chunk.embedding.length > 0) 
@@ -131,7 +154,14 @@ export async function POST(req: Request) {
 
         const systemPrompt = {
             role: "system",
-            content: `You are an AI assistant answering strictly from the provided document excerpts.
+            content: mode === "summary"
+                ? `You are an AI assistant. Summarize the document using the provided excerpts.
+The excerpts are a representative cross-section of the document; base the summary only on them.
+Do not refuse for missing specifics — summarize what is present.
+
+Document Excerpts:
+${excerpts}`
+                : `You are an AI assistant answering strictly from the provided document excerpts.
 If the answer is not found in the excerpts, say you could not find it.
 
 Document Excerpts:

@@ -38,18 +38,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ docIds, onAnalyzeT
     }, [data?.chat?.messages]);
 
     const mutation = useMutation({
-        mutationFn: async (content: string) => {
+        mutationFn: async (vars: { content: string; mode?: "qa" | "summary" }) => {
             setErrorMsg(null);
-            const res = await api.post("/chats/message", { docIds, content });
+            const res = await api.post("/chats/message", {
+                docIds,
+                content: vars.content,
+                mode: vars.mode ?? "qa",
+            });
             return res.data;
         },
-        onMutate: async (content) => {
-            const isSystemAction = content.startsWith("[SYSTEM_ACTION]");
-            if (isSystemAction) return null;
+        onMutate: async (vars) => {
+            // A summary action has no user-authored message to echo optimistically.
+            if (vars.mode === "summary") return null;
 
             const optimisticMsg: Message = {
                 role: "user",
-                content,
+                content: vars.content,
                 createdAt: new Date().toISOString(),
             };
             setLocalMessages(prev => [...prev, optimisticMsg]);
@@ -59,7 +63,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ docIds, onAnalyzeT
             queryClient.invalidateQueries({ queryKey: ["chat", idsKey] });
             setInput("");
         },
-        onError: (err: { response?: { data?: { message?: string } }; message?: string }, content, context) => {
+        onError: (err: { response?: { data?: { message?: string } }; message?: string }, _vars, context) => {
             const apiError = err.response?.data?.message || err.message || "Failed to connect to AI Core.";
             setErrorMsg(apiError);
             if (context?.optimisticMsg) {
@@ -79,9 +83,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ docIds, onAnalyzeT
     useEffect(() => {
         if (onAnalyzeTrigger) {
             onAnalyzeTrigger({
-                analyze: (doc?: DocumentMetadata) => {
-                    const prompt = `[SYSTEM_ACTION] Contextualizing "${doc?.name ?? "document"}"... Please provide a 200-word summary and confirm the total pages (${doc?.pages || 'unknown'}).`;
-                    mutation.mutate(prompt);
+                analyze: () => {
+                    // Summary mode: the content is a plain instruction (no filename,
+                    // no [SYSTEM_ACTION] marker) so it never poisons retrieval, and
+                    // the server selects representative chunks instead of ranking
+                    // against this string.
+                    mutation.mutate({
+                        content: "Provide a concise ~200-word summary of this document.",
+                        mode: "summary",
+                    });
                 }
             });
         }
@@ -92,7 +102,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ docIds, onAnalyzeT
 
     const handleSend = () => {
         if (!input.trim() || mutation.isPending) return;
-        mutation.mutate(input);
+        mutation.mutate({ content: input, mode: "qa" });
     };
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
