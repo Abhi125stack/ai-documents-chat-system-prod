@@ -7,6 +7,7 @@ export interface IDocument extends Document {
     fileId: mongoose.Types.ObjectId;
     userId: mongoose.Types.ObjectId;
     pages?: number;
+    summary?: string;
     status: DocumentStatus;
     createdAt: Date;
     updatedAt: Date;
@@ -36,6 +37,10 @@ const DocumentSchema = new mongoose.Schema(
         pages: {
             type: Number,
             default: 0,
+        },
+        // Cached Analyze summary (documents are immutable after upload).
+        summary: {
+            type: String,
         },
         status: {
             type: String,

@@ -8,15 +8,37 @@ import { getErrorMessage } from "@/lib/utils";
 import { OpenRouter } from '@openrouter/sdk';
 import mongoose from "mongoose";
 import OpenAI from "openai";
+import { summarize, type Complete } from "@/lib/summarize";
+
+// Map-reduce summaries of large documents need more than the default budget;
+// 300s is the Vercel Hobby maximum (with Fluid Compute).
+export const maxDuration = 300;
 
 type ScoredChunk = { text: string; score: number };
-type ChunkDoc = { text: string; embedding?: number[]; chunkIndex: number };
+type ChunkDoc = { text: string; embedding?: number[]; chunkIndex: number; documentId: mongoose.Types.ObjectId };
+
+const CHAT_MODEL = "openai/gpt-3.5-turbo";
 
 const openRouter = new OpenRouter({
     apiKey: process.env.OPENROUTER_AI_SECRET_KEY || '',
     httpReferer: "http://localhost:3000",
     xTitle: "AI Documents Chat System",
 });
+
+// One stateless completion — used by the summary map-reduce.
+const complete: Complete = async (messages) => {
+    const completion = await openRouter.chat.send({
+        chatGenerationParams: {
+            model: CHAT_MODEL,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            messages: messages as any,
+            stream: false,
+        }
+    });
+    const text = completion.choices[0]?.message.content;
+    if (typeof text !== "string" || !text.trim()) throw new Error("Empty completion from AI model.");
+    return text;
+};
 
 const openai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",
@@ -95,27 +117,11 @@ export async function POST(req: Request) {
         );
         console.log("All chunks:", allChunks.length);
         
-        // 4. Select relevant chunks
+        // 4. Select relevant chunks (qa only — summary mode reads the whole
+        //    document via lib/summarize in step 7).
         let topChunks: string[] = [];
 
-        if (mode === "summary") {
-            // Summary: do NOT rank against the instruction string (that poisons
-            // retrieval with the query's own words). Pick representative coverage —
-            // the leading chunks plus an even stride sample across the document —
-            // ordered by position so the model sees a faithful cross-section.
-            const ordered = [...allChunks].sort(
-                (a: ChunkDoc, b: ChunkDoc) => a.chunkIndex - b.chunkIndex
-            );
-            const MAX = 6;
-            if (ordered.length <= MAX) {
-                topChunks = ordered.map((c: ChunkDoc) => c.text);
-            } else {
-                const stride = Math.ceil(ordered.length / MAX);
-                for (let i = 0; i < ordered.length && topChunks.length < MAX; i += stride) {
-                    topChunks.push(ordered[i].text);
-                }
-            }
-        } else if (questionEmbedding && allChunks.some((c: ChunkDoc) => c.embedding && c.embedding.length > 0)) {
+        if (mode === "qa" && questionEmbedding && allChunks.some((c: ChunkDoc) => c.embedding && c.embedding.length > 0)) {
             // Semantic Search using Cosine Similarity
             const scoredChunks: ScoredChunk[] = allChunks.map((chunk: ChunkDoc) => {
                 const score = (chunk.embedding && chunk.embedding.length > 0) 
@@ -129,7 +135,7 @@ export async function POST(req: Request) {
             
             // Pick top 5 chunks
             topChunks = scoredChunks.slice(0, 5).map((c: ScoredChunk) => c.text);
-        } else {
+        } else if (mode === "qa") {
             // Fallback: Basic Keyword Search
             const searchTerms = content.toLowerCase().split(/\s+/).filter((word: string) => word.length > 3);
             const scoredChunks: ScoredChunk[] = allChunks.map((chunk: ChunkDoc) => {
@@ -154,14 +160,7 @@ export async function POST(req: Request) {
 
         const systemPrompt = {
             role: "system",
-            content: mode === "summary"
-                ? `You are an AI assistant. Summarize the document using the provided excerpts.
-The excerpts are a representative cross-section of the document; base the summary only on them.
-Do not refuse for missing specifics — summarize what is present.
-
-Document Excerpts:
-${excerpts}`
-                : `You are an AI assistant answering strictly from the provided document excerpts.
+            content: `You are an AI assistant answering strictly from the provided document excerpts.
 If the answer is not found in the excerpts, say you could not find it.
 
 Document Excerpts:
@@ -184,25 +183,43 @@ ${excerpts}`
                 throw new Error("Missing AI API key in environment variables.");
             }
 
-            const chatMessages = [
-                systemPrompt,
-                ...messageHistory,
-                { role: "user", content: content },
-            ];
+            if (mode === "summary") {
+                // Whole-document summary: map-reduce over all chunks (sampled only
+                // for very large docs), no chat history, cached per document.
+                const result = await summarize(
+                    documents.map((d: { _id: mongoose.Types.ObjectId; name: string; summary?: string }) => ({
+                        id: String(d._id),
+                        name: d.name,
+                        cachedSummary: d.summary,
+                        chunks: allChunks.filter((c: ChunkDoc) => String(c.documentId) === String(d._id)),
+                    })),
+                    complete
+                );
+                aiResponse = result.summary;
+                await Promise.all(
+                    result.toCache.map((c) => Document.updateOne({ _id: c.id, userId }, { $set: { summary: c.summary } }))
+                );
+            } else {
+                const chatMessages = [
+                    systemPrompt,
+                    ...messageHistory,
+                    { role: "user", content: content },
+                ];
 
-            const completion = await openRouter.chat.send({
-                chatGenerationParams: {
-                    model: 'openai/gpt-3.5-turbo', 
-                    // OpenRouter SDK's message union is stricter than our role:string shape;
-                    // the runtime payload is correct, only the compile-time union differs.
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    messages: chatMessages as any,
-                    stream: false,
-                }
-            });
+                const completion = await openRouter.chat.send({
+                    chatGenerationParams: {
+                        model: CHAT_MODEL,
+                        // OpenRouter SDK's message union is stricter than our role:string shape;
+                        // the runtime payload is correct, only the compile-time union differs.
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        messages: chatMessages as any,
+                        stream: false,
+                    }
+                });
 
-            aiResponse = completion.choices[0].message.content;
-            console.log("AI Response:", completion.choices);
+                aiResponse = completion.choices[0].message.content;
+                console.log("AI Response:", completion.choices);
+            }
         } catch (openAiError: unknown) {
             console.error("AI API ERROR:", openAiError);
             return NextResponse.json({ 
