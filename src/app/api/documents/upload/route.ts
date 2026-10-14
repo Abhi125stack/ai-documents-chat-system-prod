@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Document, { IDocument } from "@/models/Document";
 import DocumentChunk from "@/models/DocumentChunk";
+import { indexChunks } from "@/lib/chroma";
 import { getUserIdFromHeader } from "@/lib/auth";
 import { GridFSBucket } from "mongodb";
 import mongoose from "mongoose";
@@ -149,7 +150,18 @@ export async function POST(req: Request) {
                         embedding: embedRes.data[i].embedding || []
                     }));
                     
-                    await DocumentChunk.insertMany(chunkDocs);
+                    const savedChunks = await DocumentChunk.insertMany(chunkDocs);
+
+                    // Mongo stays the source of truth; Chroma is only the search
+                    // index. If indexing fails the upload still succeeds and this
+                    // document keeps using the in-Node cosine scan.
+                    try {
+                        const indexed = await indexChunks(savedChunks);
+                        newDoc.vectorIndexed = indexed === textChunks.length;
+                        console.log(`Indexed ${indexed}/${textChunks.length} chunk vectors in Chroma for ${filename}`);
+                    } catch (err) {
+                        console.error("Chroma indexing failed; document will use in-Node search.", err);
+                    }
                     
                 } catch(e) {
                     console.error("Embedding generation failed, saving raw chunks instead.", e);

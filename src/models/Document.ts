@@ -8,6 +8,7 @@ export interface IDocument extends Document {
     userId: mongoose.Types.ObjectId;
     pages?: number;
     summary?: string;
+    vectorIndexed?: boolean;
     status: DocumentStatus;
     createdAt: Date;
     updatedAt: Date;
@@ -41,6 +42,12 @@ const DocumentSchema = new mongoose.Schema(
         // Cached Analyze summary (documents are immutable after upload).
         summary: {
             type: String,
+        },
+        // True once every embedded chunk is in the Chroma index. Retrieval uses
+        // Chroma only when all selected documents are indexed, else the in-Node scan.
+        vectorIndexed: {
+            type: Boolean,
+            default: false,
         },
         status: {
             type: String,

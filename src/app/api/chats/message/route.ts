@@ -9,6 +9,7 @@ import { OpenRouter } from '@openrouter/sdk';
 import mongoose from "mongoose";
 import OpenAI from "openai";
 import { summarize, type Complete } from "@/lib/summarize";
+import { queryChunkIds } from "@/lib/chroma";
 
 // Map-reduce summaries of large documents need more than the default budget;
 // 300s is the Vercel Hobby maximum (with Fluid Compute).
@@ -111,17 +112,38 @@ export async function POST(req: Request) {
         //    scoped by userId at the chunk layer too (defense in depth: retrieval
         //    can never read another user's chunks even if the id list changes).
         const ownedDocIds = documents.map((d: { _id: mongoose.Types.ObjectId }) => d._id);
-
-        const allChunks = await DocumentChunk.find(
-            { documentId: { $in: ownedDocIds }, userId }
-        );
-        console.log("All chunks:", allChunks.length);
-        
-        // 4. Select relevant chunks (qa only — summary mode reads the whole
-        //    document via lib/summarize in step 7).
+        const TOP_K = 5;
         let topChunks: string[] = [];
 
-        if (mode === "qa" && questionEmbedding && allChunks.some((c: ChunkDoc) => c.embedding && c.embedding.length > 0)) {
+        // 3a. Vector search via Chroma (qa only, and only when every selected
+        //     document is indexed, so a not-yet-indexed one is never silently
+        //     left out). Chroma returns ranked chunk ids; the text comes from
+        //     Mongo, scoped by owned documents + userId as before.
+        if (mode === "qa" && questionEmbedding && documents.every((d: { vectorIndexed?: boolean }) => d.vectorIndexed)) {
+            try {
+                const ids = await queryChunkIds(questionEmbedding, String(userId), ownedDocIds.map(String), TOP_K);
+                const rows = await DocumentChunk.find(
+                    { _id: { $in: ids }, documentId: { $in: ownedDocIds }, userId },
+                    { text: 1 }
+                );
+                const textById = new Map(rows.map((r: { _id: unknown; text: string }) => [String(r._id), r.text]));
+                topChunks = ids.map((id) => textById.get(id)).filter((t): t is string => !!t);
+                console.log(`Chroma retrieval: ${ids.length} ids -> ${topChunks.length} chunks from Mongo`);
+            } catch (err) {
+                console.error("Chroma query failed, falling back to in-Node search.", err);
+            }
+        }
+
+        // 3b. Otherwise (and always for summary) load the owned chunks from Mongo.
+        const allChunks = topChunks.length > 0
+            ? []
+            : await DocumentChunk.find({ documentId: { $in: ownedDocIds }, userId });
+        console.log("All chunks:", allChunks.length);
+        
+        // 4. Fallback chunk selection (qa only, when Chroma was not used) —
+        //    summary mode reads the whole document via lib/summarize in step 7.
+
+        if (mode === "qa" && topChunks.length === 0 && questionEmbedding && allChunks.some((c: ChunkDoc) => c.embedding && c.embedding.length > 0)) {
             // Semantic Search using Cosine Similarity
             const scoredChunks: ScoredChunk[] = allChunks.map((chunk: ChunkDoc) => {
                 const score = (chunk.embedding && chunk.embedding.length > 0) 
@@ -135,7 +157,7 @@ export async function POST(req: Request) {
             
             // Pick top 5 chunks
             topChunks = scoredChunks.slice(0, 5).map((c: ScoredChunk) => c.text);
-        } else if (mode === "qa") {
+        } else if (mode === "qa" && topChunks.length === 0) {
             // Fallback: Basic Keyword Search
             const searchTerms = content.toLowerCase().split(/\s+/).filter((word: string) => word.length > 3);
             const scoredChunks: ScoredChunk[] = allChunks.map((chunk: ChunkDoc) => {
