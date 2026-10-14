@@ -22,7 +22,6 @@
     "date-fns": "^4.1.0",
     "framer-motion": "^12.34.3",
     "jsonwebtoken": "^9.0.3",
-    "lottie-react": "^2.4.1",
     "lucide-react": "^0.575.0",
     "mongoose": "^9.2.3",
     "next": "16.1.6",
