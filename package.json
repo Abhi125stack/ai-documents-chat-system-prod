@@ -10,7 +10,6 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@chroma-core/default-embed": "0.1.9",
     "@napi-rs/canvas": "^0.1.95",
     "@openrouter/sdk": "^0.9.11",
     "@tanstack/react-query": "^5.90.21",
